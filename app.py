@@ -1,27 +1,49 @@
+import os
 import streamlit as st
 import pandas as pd
 import joblib
+import gdown
 
 st.set_page_config(page_title="EduHope", page_icon="🎓")
 
-bundle = joblib.load("eduhope_model.joblib")
-model = bundle["model"]
-feature_names = bundle["feature_names"]
+MODEL_PATH = "eduhope_model.joblib"
+DRIVE_FILE_ID = "1V9ptd87Nlp5ojM9rVC4prcBvMWMT0L2a"
+
+@st.cache_resource
+def load_model():
+    if not os.path.exists(MODEL_PATH):
+        url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
+        gdown.download(url, MODEL_PATH, quiet=False)
+
+    return joblib.load(MODEL_PATH)
+
+try:
+    bundle = load_model()
+    model = bundle["model"]
+    feature_names = bundle["feature_names"]
+except Exception as e:
+    st.error("Unable to load the model. Check the Google Drive sharing settings.")
+    st.stop()
 
 st.title("🎓 EduHope")
 st.subheader("No Student Left Behind")
-st.write("Predict student outcomes and identify where additional support may help.")
+st.write(
+    "Predict student outcomes using machine learning "
+    "and help identify where additional student support may be useful."
+)
 
-st.info("Enter the numeric values for the student's dataset features below.")
+st.info("Enter the numeric values for the dataset features below.")
 
 with st.form("student_form"):
     values = {}
+    columns = st.columns(3)
 
-    for feature in feature_names:
-        values[feature] = st.number_input(
-            feature.replace("_", " ").title(),
-            value=0.0
-        )
+    for i, feature in enumerate(feature_names):
+        with columns[i % 3]:
+            values[feature] = st.number_input(
+                feature.replace("_", " ").title(),
+                value=0.0
+            )
 
     submitted = st.form_submit_button("Predict Outcome")
 
@@ -33,7 +55,7 @@ if submitted:
 
     prediction = model.predict(input_df)[0]
 
-    st.subheader("Prediction")
+    st.subheader("Predicted Student Outcome")
 
     if prediction == "Graduate":
         st.success("Predicted outcome: Graduate 🎓")
@@ -43,4 +65,6 @@ if submitted:
     else:
         st.info("Predicted outcome: Enrolled 📚")
 
-    st.caption("This is a prediction, not a certainty or a judgment about the student.")
+    st.caption(
+        "This is a prediction, not a certainty or a judgment about the student."
+    ) judgment about the student.")
