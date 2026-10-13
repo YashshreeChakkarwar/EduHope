@@ -76,8 +76,17 @@ st.markdown("""
     background: linear-gradient(120deg, #452477, #8757D9);
     margin-bottom: 24px;
 }
-.hero h1 { color: white; font-size: 32px; }
-.hero p { color: #F0E7FF; }
+.hero h1 { color: #FFFFFF !important; font-size: 32px; }
+.hero p { color: #F0E7FF !important; }
+/* Keep all text inside purple hero banners white despite global dark-text rules */
+[data-testid="stMain"] .hero,
+[data-testid="stMain"] .hero *,
+[data-testid="stMain"] .hero h1 {
+    color: #FFFFFF !important;
+}
+[data-testid="stMain"] .hero p {
+    color: #F0E7FF !important;
+}
 .metric-card {
     background: white; border: 1px solid #E8DFFA;
     border-radius: 16px; padding: 18px; min-height: 110px;
