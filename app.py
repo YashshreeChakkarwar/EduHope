@@ -96,7 +96,19 @@ div.stButton > button, div.stFormSubmitButton > button {
 div.stButton > button:hover, div.stFormSubmitButton > button:hover {
     background: #543091; color: white; border: 0;
 }
-/* Ensure typed text and placeholder text are readable in forms */
+/* Questions, field labels and normal text on the light page must be dark */
+[data-testid="stMain"] label,
+[data-testid="stMain"] [data-testid="stWidgetLabel"],
+[data-testid="stMain"] [data-testid="stWidgetLabel"] *,
+[data-testid="stMain"] .stMarkdown,
+[data-testid="stMain"] .stMarkdown p,
+[data-testid="stMain"] .stMarkdown h1,
+[data-testid="stMain"] .stMarkdown h2,
+[data-testid="stMain"] .stMarkdown h3 {
+    color: #281B42 !important;
+}
+
+/* Keep typed text white inside the existing dark input boxes */
 .stApp input, .stApp textarea,
 [data-baseweb="select"] > div,
 [data-baseweb="input"] > div {
