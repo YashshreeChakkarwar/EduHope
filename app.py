@@ -17,6 +17,56 @@ st.set_page_config(
 MODEL_PATH = "eduhope_model.joblib"
 DB_PATH = "eduhope_support.db"
 
+# Reference values calculated from the original CSV.
+# These fill features that are not shown in the short form.
+REFERENCE_VALUES = {
+    "marital status": 1,
+    "application mode": 8,
+    "application order": 1,
+    "course": 10,
+    "daytime/evening attendance": 1,
+    "previous qualification": 1,
+    "nacionality": 1,
+    "mother's qualification": 13,
+    "father's qualification": 14,
+    "mother's occupation": 6,
+    "father's occupation": 8,
+    "displaced": 1,
+    "educational special needs": 0,
+    "debtor": 0,
+    "tuition fees up to date": 1,
+    "gender": 0,
+    "scholarship holder": 0,
+    "age at enrollment": 20,
+    "international": 0,
+    "curricular units 1st sem (credited)": 0,
+    "curricular units 1st sem (enrolled)": 6,
+    "curricular units 1st sem (evaluations)": 8,
+    "curricular units 1st sem (approved)": 5,
+    "curricular units 1st sem (grade)": 12.28571429,
+    "curricular units 1st sem (without evaluations)": 0,
+    "curricular units 2nd sem (credited)": 0,
+    "curricular units 2nd sem (enrolled)": 6,
+    "curricular units 2nd sem (evaluations)": 8,
+    "curricular units 2nd sem (approved)": 5,
+    "curricular units 2nd sem (grade)": 12.2,
+    "curricular units 2nd sem (without evaluations)": 0,
+    "unemployment rate": 11.1,
+    "inflation rate": 1.4,
+    "gdp": 0.32,
+}
+
+
+def normalize_feature(name):
+    return (
+        str(name)
+        .replace("\ufeff", "")
+        .replace("ï»¿", "")
+        .strip()
+        .lower()
+    )
+
+
 # --------------------------------------------------
 # PURPLE DESIGN
 # --------------------------------------------------
@@ -81,22 +131,98 @@ div.stButton > button:hover, div.stFormSubmitButton > button:hover {
 """, unsafe_allow_html=True)
 
 # --------------------------------------------------
-# LOAD YOUR EXISTING RANDOM FOREST MODEL
+# LOAD EXISTING MODEL
 # --------------------------------------------------
 @st.cache_resource
 def load_model():
     bundle = joblib.load(MODEL_PATH)
     return bundle["model"], list(bundle["feature_names"])
 
+
 try:
     model, feature_names = load_model()
 except Exception as error:
     st.error(f"Could not load the model: {error}")
     st.info(
-        "Ensure eduhope_model.joblib is present in the app environment "
-        "and contains 'model' and 'feature_names'."
+        "Check that eduhope_model.joblib is accessible and contains "
+        "'model' and 'feature_names'. If your deployment downloads it "
+        "from Google Drive, restore that download logic here."
     )
     st.stop()
+
+
+# --------------------------------------------------
+# BUILD SHORT-FORM INPUTS
+# --------------------------------------------------
+def build_student_features(
+    age, fees, scholarship,
+    sem1_enrolled, sem1_approved, sem1_grade,
+    sem2_enrolled, sem2_approved, sem2_grade
+):
+    reference_lookup = {
+        normalize_feature(name): value
+        for name, value in REFERENCE_VALUES.items()
+    }
+
+    # Fail clearly if a model feature has no reference value.
+    missing = [
+        name for name in feature_names
+        if normalize_feature(name) not in reference_lookup
+    ]
+
+    if missing:
+        raise ValueError(
+            "Reference values are missing for model features: "
+            + ", ".join(missing)
+        )
+
+    # Preserve the exact feature names and order used by the model.
+    values = {
+        name: reference_lookup[normalize_feature(name)]
+        for name in feature_names
+    }
+
+    entered = {
+        "Age at enrollment": age,
+        "Tuition fees up to date": fees,
+        "Scholarship holder": scholarship,
+        "Curricular units 1st sem (enrolled)": sem1_enrolled,
+        "Curricular units 1st sem (approved)": sem1_approved,
+        "Curricular units 1st sem (grade)": sem1_grade,
+        "Curricular units 2nd sem (enrolled)": sem2_enrolled,
+        "Curricular units 2nd sem (approved)": sem2_approved,
+        "Curricular units 2nd sem (grade)": sem2_grade,
+    }
+
+    entered_lookup = {
+        normalize_feature(name): value
+        for name, value in entered.items()
+    }
+
+    for feature in feature_names:
+        normalized = normalize_feature(feature)
+        if normalized in entered_lookup:
+            values[feature] = entered_lookup[normalized]
+
+    return values
+
+
+def predict_student(values):
+    input_df = pd.DataFrame(
+        [[values[feature] for feature in feature_names]],
+        columns=feature_names,
+    )
+
+    prediction = model.predict(input_df)[0]
+
+    probabilities = (
+        model.predict_proba(input_df)[0]
+        if hasattr(model, "predict_proba")
+        else None
+    )
+
+    return prediction, probabilities
+
 
 # --------------------------------------------------
 # DATABASE: SUPPORT PLANS
@@ -116,6 +242,7 @@ def init_db():
             )
         """)
 
+
 def save_plan(student_ref, concern, action, mentor, follow_up):
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -133,6 +260,7 @@ def save_plan(student_ref, concern, action, mentor, follow_up):
             date.today().isoformat(),
         ))
 
+
 def get_plans():
     with sqlite3.connect(DB_PATH) as conn:
         return pd.read_sql_query("""
@@ -142,48 +270,39 @@ def get_plans():
             ORDER BY follow_up_date ASC, id DESC
         """, conn)
 
+
 def update_status(plan_id, status):
     allowed = [
         "Needs follow-up",
         "Support in progress",
         "Follow-up completed",
     ]
+
     if status not in allowed:
         raise ValueError("Invalid status")
+
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             "UPDATE support_plans SET status = ? WHERE id = ?",
             (status, int(plan_id)),
         )
 
+
 init_db()
 
-# --------------------------------------------------
-# PREDICTION FUNCTION
-# Uses all existing features in their original order.
-# --------------------------------------------------
-def predict_student(values):
-    input_df = pd.DataFrame(
-        [[values[feature] for feature in feature_names]],
-        columns=feature_names,
-    )
-    prediction = model.predict(input_df)[0]
-    probabilities = (
-        model.predict_proba(input_df)[0]
-        if hasattr(model, "predict_proba")
-        else None
-    )
-    return prediction, probabilities
 
 # --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
 if "latest_prediction" not in st.session_state:
     st.session_state.latest_prediction = None
+
 if "latest_probabilities" not in st.session_state:
     st.session_state.latest_probabilities = None
+
 if "latest_student_ref" not in st.session_state:
     st.session_state.latest_student_ref = ""
+
 
 # --------------------------------------------------
 # SIDEBAR
@@ -206,6 +325,7 @@ with st.sidebar:
     st.divider()
     st.caption("Every prediction is an opportunity to offer support.")
 
+
 # --------------------------------------------------
 # DASHBOARD
 # --------------------------------------------------
@@ -220,11 +340,21 @@ if page == "Dashboard":
 
     plans = get_plans()
     total = len(plans)
-    needs = int((plans["status"] == "Needs follow-up").sum()) if total else 0
-    active = int((plans["status"] == "Support in progress").sum()) if total else 0
-    completed = int((plans["status"] == "Follow-up completed").sum()) if total else 0
+
+    needs = int(
+        (plans["status"] == "Needs follow-up").sum()
+    ) if total else 0
+
+    active = int(
+        (plans["status"] == "Support in progress").sum()
+    ) if total else 0
+
+    completed = int(
+        (plans["status"] == "Follow-up completed").sum()
+    ) if total else 0
 
     cols = st.columns(4)
+
     cards = [
         ("Support plans", total),
         ("Needs follow-up", needs),
@@ -242,6 +372,7 @@ if page == "Dashboard":
             )
 
     st.markdown("## How EduHope helps")
+
     c1, c2 = st.columns(2)
 
     with c1:
@@ -273,20 +404,22 @@ if page == "Dashboard":
         "not the total number of students at a college."
     )
 
+
 # --------------------------------------------------
-# RISK REPORT
+# RISK REPORT: ONLY NINE MODEL INPUTS
 # --------------------------------------------------
 elif page == "Risk Report":
     st.markdown("""
     <div class="hero">
-        <h1>Student Risk Report</h1>
-        <p>Explore a model estimate and consider whether support may help.</p>
+        <h1>Student Risk Report 💜</h1>
+        <p>A few student details can help us explore where support may be useful.</p>
     </div>
     """, unsafe_allow_html=True)
 
     st.info(
-        "All original model features are retained to preserve compatibility. "
-        "Use the same feature values and units as the training dataset."
+        "Only nine student details are requested. The remaining model "
+        "features use reference values from the original dataset. "
+        "The result is an estimate, not a certainty."
     )
 
     with st.form("student_form"):
@@ -294,29 +427,124 @@ elif page == "Risk Report":
             "Student reference",
             placeholder="Example: STU-001 (use a fictional ID for demos)",
         )
-        values = {}
 
-        for feature in feature_names:
-            values[feature] = st.number_input(
-                feature.replace("_", " ").title(),
-                value=0.0,
-                key=f"feature_{feature}",
-            )
+        st.markdown("### Student details")
+
+        age = st.number_input(
+            "Age at enrollment",
+            min_value=15,
+            max_value=100,
+            value=20,
+            step=1,
+        )
+
+        fees_option = st.selectbox(
+            "Are tuition fees up to date?",
+            ["Yes", "No"],
+        )
+        fees = 1 if fees_option == "Yes" else 0
+
+        scholarship_option = st.selectbox(
+            "Does the student hold a scholarship?",
+            ["No", "Yes"],
+        )
+        scholarship = 1 if scholarship_option == "Yes" else 0
+
+        st.markdown("### First-semester performance")
+
+        sem1_enrolled = st.number_input(
+            "Units enrolled in semester 1",
+            min_value=0,
+            max_value=30,
+            value=6,
+            step=1,
+        )
+
+        sem1_approved = st.number_input(
+            "Units approved in semester 1",
+            min_value=0,
+            max_value=30,
+            value=5,
+            step=1,
+        )
+
+        sem1_grade = st.number_input(
+            "Average grade in semester 1 (0–20)",
+            min_value=0.0,
+            max_value=20.0,
+            value=12.3,
+            step=0.1,
+        )
+
+        st.markdown("### Second-semester performance")
+
+        sem2_enrolled = st.number_input(
+            "Units enrolled in semester 2",
+            min_value=0,
+            max_value=30,
+            value=6,
+            step=1,
+        )
+
+        sem2_approved = st.number_input(
+            "Units approved in semester 2",
+            min_value=0,
+            max_value=30,
+            value=5,
+            step=1,
+        )
+
+        sem2_grade = st.number_input(
+            "Average grade in semester 2 (0–20)",
+            min_value=0.0,
+            max_value=20.0,
+            value=12.2,
+            step=0.1,
+        )
 
         submitted = st.form_submit_button(
-            "Predict Outcome",
+            "Predict Student Outcome",
             use_container_width=True,
         )
 
     if submitted:
-        try:
-            prediction, probabilities = predict_student(values)
-            st.session_state.latest_prediction = str(prediction)
-            st.session_state.latest_probabilities = probabilities
-            st.session_state.latest_student_ref = student_ref.strip()
-            st.success("Prediction generated.")
-        except Exception as error:
-            st.error(f"Prediction failed: {error}")
+        if not student_ref.strip():
+            st.error("Please enter a student reference.")
+
+        elif sem1_approved > sem1_enrolled:
+            st.error(
+                "Semester 1 approved units cannot exceed enrolled units."
+            )
+
+        elif sem2_approved > sem2_enrolled:
+            st.error(
+                "Semester 2 approved units cannot exceed enrolled units."
+            )
+
+        else:
+            try:
+                values = build_student_features(
+                    age,
+                    fees,
+                    scholarship,
+                    sem1_enrolled,
+                    sem1_approved,
+                    sem1_grade,
+                    sem2_enrolled,
+                    sem2_approved,
+                    sem2_grade,
+                )
+
+                prediction, probabilities = predict_student(values)
+
+                st.session_state.latest_prediction = str(prediction)
+                st.session_state.latest_probabilities = probabilities
+                st.session_state.latest_student_ref = student_ref.strip()
+
+                st.success("Prediction generated.")
+
+            except Exception as error:
+                st.error(f"Prediction failed: {error}")
 
     prediction = st.session_state.latest_prediction
     probabilities = st.session_state.latest_probabilities
@@ -326,17 +554,28 @@ elif page == "Risk Report":
 
         if prediction == "Graduate":
             st.success("Predicted outcome: Graduate 🎓")
+            st.write(
+                "Continue encouraging the student's progress and "
+                "offer support whenever needed."
+            )
+
         elif prediction == "Dropout":
             st.warning("Predicted outcome: Dropout")
             st.write(
-                "Consider whether a supportive academic check-in may help. "
-                "This is not a certainty."
+                "Consider a supportive conversation to understand "
+                "the student's academic, financial, or personal challenges."
             )
+
         else:
             st.info(f"Predicted outcome: {prediction} 📚")
+            st.write(
+                "Consider regular check-ins to help the student "
+                "continue progressing."
+            )
 
         if probabilities is not None:
             st.markdown("### Estimated class probabilities")
+
             for label, probability in sorted(
                 zip(model.classes_, probabilities),
                 key=lambda item: item[1],
@@ -346,15 +585,18 @@ elif page == "Risk Report":
                 st.progress(float(probability))
 
         st.caption(
-            "Model estimates are not guarantees and do not explain why "
-            "a student may need support."
+            "Unentered features use fixed dataset reference values. "
+            "The prediction may be less accurate when a student's "
+            "actual circumstances differ from those values. Do not "
+            "use this estimate alone to make decisions about a student."
         )
 
         st.markdown("### What happens next?")
         st.write(
-            "If support may be useful, create a plan in Comeback Pathway. "
-            "Students can receive support regardless of the predicted outcome."
+            "If support may be useful, visit Comeback Pathway to record "
+            "an action plan and follow-up date."
         )
+
 
 # --------------------------------------------------
 # COMEBACK PATHWAY
@@ -423,19 +665,19 @@ elif page == "Comeback Pathway":
         else:
             save_plan(student_ref, concern, action, mentor, follow_up)
             st.success(
-                "Support plan created! You can track its progress "
-                "on the Support Tracker page."
+                "Support plan created! Track its progress on the Support Tracker page."
             )
 
     st.markdown("### Our promise")
+
     st.markdown("""
     <div class="support-card">
     <b>Notice → Listen → Support → Follow up</b><br><br>
-    EduHope is designed to encourage constructive support. A model
-    prediction should never be used on its own to punish, exclude,
-    or deny a student an opportunity.
+    EduHope encourages constructive support. A model prediction should
+    never be used on its own to punish, exclude, or deny a student an opportunity.
     </div>
     """, unsafe_allow_html=True)
+
 
 # --------------------------------------------------
 # SUPPORT TRACKER
@@ -453,70 +695,3 @@ elif page == "Support Tracker":
     if plans.empty:
         st.info(
             "No support plans have been created yet. "
-            "Visit Comeback Pathway to create your first plan."
-        )
-    else:
-        total = len(plans)
-        needs = int((plans["status"] == "Needs follow-up").sum())
-        active = int((plans["status"] == "Support in progress").sum())
-        completed = int((plans["status"] == "Follow-up completed").sum())
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Needs follow-up", needs)
-        c2.metric("Support in progress", active)
-        c3.metric("Follow-up completed", completed)
-
-        st.markdown("## Support plans")
-
-        for _, plan in plans.iterrows():
-            plan_id = int(plan["id"])
-            follow_date = str(plan["follow_up_date"])
-            is_overdue = (
-                follow_date < date.today().isoformat()
-                and plan["status"] != "Follow-up completed"
-            )
-
-            with st.expander(
-                f"Plan #{plan_id} · {plan['student_ref']} · {plan['status']}"
-            ):
-                st.write(f"**Concern:** {plan['concern']}")
-                st.write(f"**Agreed action:** {plan['action_plan']}")
-                st.write(f"**Mentor:** {plan['mentor']}")
-                st.write(f"**Follow-up date:** {follow_date}")
-
-                if is_overdue:
-                    st.warning("Follow-up date has passed. Please review this plan.")
-
-                status_options = [
-                    "Needs follow-up",
-                    "Support in progress",
-                    "Follow-up completed",
-                ]
-
-                current_status = plan["status"]
-                selected_status = st.selectbox(
-                    "Update status",
-                    status_options,
-                    index=status_options.index(current_status),
-                    key=f"status_{plan_id}",
-                )
-
-                if st.button(
-                    "Save status",
-                    key=f"save_{plan_id}",
-                ):
-                    update_status(plan_id, selected_status)
-                    st.success("Status updated.")
-                    st.rerun()
-
-        st.markdown("## All support records")
-        st.dataframe(plans, use_container_width=True, hide_index=True)
-
-# --------------------------------------------------
-# FOOTER
-# --------------------------------------------------
-st.divider()
-st.caption(
-    "EduHope · No Student Left Behind · "
-    "Predictions support human judgment; they do not replace it."
-)
