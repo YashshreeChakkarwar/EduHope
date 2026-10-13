@@ -68,7 +68,50 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-.stApp { background: #F8F6FF; color: #281B42; }
+/* Soft lavender background for the entire EduHope app */
+.stApp {
+    background: linear-gradient(
+        135deg,
+        #F1EAFE 0%,
+        #F8F5FF 45%,
+        #EEE7FC 100%
+    );
+    color: #281B42;
+    background-attachment: fixed;
+}
+
+/* Keep the main content background transparent */
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"] {
+    background: transparent;
+}
+
+/* Soft glass-like background behind the top navigation */
+.top-brand {
+    background: rgba(255, 255, 255, 0.65);
+    border: 1px solid rgba(112, 68, 191, 0.12);
+    border-radius: 18px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 18px rgba(75, 45, 125, 0.05);
+}
+
+/* Make form fields readable against the lavender background */
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextArea"] textarea,
+[data-testid="stSelectbox"] > div > div {
+    background-color: #FFFFFF;
+    border-color: #DDD0F5;
+    border-radius: 10px;
+}
+
+/* Subtle separation below the navigation */
+.top-nav-divider {
+    border: none;
+    border-top: 1px solid #DCCEF4;
+    margin: 0 0 24px 0;
+}
 [data-testid="stSidebar"] {
     display: none;
 }
