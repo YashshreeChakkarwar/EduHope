@@ -694,4 +694,4 @@ elif page == "Support Tracker":
 
     if plans.empty:
         st.info(
-            "No support plans have been created yet. "
+            "No support plans have been created yet. ")
