@@ -69,8 +69,9 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 .stApp { background: #F8F6FF; color: #281B42; }
-[data-testid="stSidebar"] { background: linear-gradient(180deg, #241443, #56308F); }
-[data-testid="stSidebar"] * { color: white; }
+[data-testid="stSidebar"] {
+    display: none;
+}
 .hero {
     padding: 26px; border-radius: 22px; color: white;
     background: linear-gradient(120deg, #452477, #8757D9);
@@ -285,29 +286,39 @@ for key, default in {
 
 
 # --------------------------------------------------
-# SIDEBAR NAVIGATION
+# TOP NAVIGATION
 # --------------------------------------------------
-with st.sidebar:
-    st.markdown("# 🎓 EduHope")
-    st.caption("NO STUDENT LEFT BEHIND")
-    st.divider()
-    page = st.radio(
-        "Navigation",
-        [
-            "Dashboard",
-            "Risk Report",
-            "Comeback Pathway",
-            "Support Tracker",
-            "Future-Me Simulator",
-            "Student Success Passport",
-            "Academic Strength Finder",
-            "Roadmap",
-        ],
-    )
-    st.divider()
-    st.caption("Every prediction is an opportunity to offer support.")
+st.markdown("""
+<div class="top-brand">
+    <div class="top-brand-mark">🎓</div>
+    <div>
+        <div class="top-brand-name">EduHope</div>
+        <div class="top-brand-tagline">NO STUDENT LEFT BEHIND</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
+page = st.radio(
+    "Navigation",
+    [
+        "Dashboard",
+        "Risk Report",
+        "Comeback Pathway",
+        "Support Tracker",
+        "Future-Me Simulator",
+        "Student Success Passport",
+        "Academic Strength Finder",
+        "Roadmap",
+    ],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="top_navigation",
+)
 
+st.markdown(
+    '<hr class="top-nav-divider">',
+    unsafe_allow_html=True
+)
 # --------------------------------------------------
 # DASHBOARD (EXISTING)
 # --------------------------------------------------
@@ -714,4 +725,14 @@ elif page == "Roadmap":
         st.info("Complete the form above to create a roadmap for your selected goal.")
 
 
-st.sidebar.caption("EduHope is a support tool. Predictions and summaries are not guarantees.")
+st.markdown("""
+<div style="
+    text-align: center;
+    color: #766B8B;
+    font-size: 12px;
+    padding: 22px 0 8px;
+">
+    EduHope is a support tool.
+    Predictions and summaries are not guarantees.
+</div>
+""", unsafe_allow_html=True)
