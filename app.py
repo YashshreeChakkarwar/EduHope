@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -694,4 +695,69 @@ elif page == "Support Tracker":
 
     if plans.empty:
         st.info(
-            "No support plans have been created yet. ")
+            "No support plans have been created yet. "
+            "Visit Comeback Pathway to create your first plan."
+        )
+
+    else:
+        needs = int((plans["status"] == "Needs follow-up").sum())
+        active = int((plans["status"] == "Support in progress").sum())
+        completed = int((plans["status"] == "Follow-up completed").sum())
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Needs follow-up", needs)
+        c2.metric("Support in progress", active)
+        c3.metric("Follow-up completed", completed)
+
+        st.markdown("## Support plans")
+
+        for _, plan in plans.iterrows():
+            plan_id = int(plan["id"])
+            follow_date = str(plan["follow_up_date"])
+
+            is_overdue = (
+                follow_date < date.today().isoformat()
+                and plan["status"] != "Follow-up completed"
+            )
+
+            with st.expander(
+                f"Plan #{plan_id} · {plan['student_ref']} · {plan['status']}"
+            ):
+                st.write(f"**Concern:** {plan['concern']}")
+                st.write(f"**Agreed action:** {plan['action_plan']}")
+                st.write(f"**Mentor:** {plan['mentor']}")
+                st.write(f"**Follow-up date:** {follow_date}")
+
+                if is_overdue:
+                    st.warning("Follow-up date has passed. Please review this plan.")
+
+                status_options = [
+                    "Needs follow-up",
+                    "Support in progress",
+                    "Follow-up completed",
+                ]
+
+                selected_status = st.selectbox(
+                    "Update status",
+                    status_options,
+                    index=status_options.index(plan["status"]),
+                    key=f"status_{plan_id}",
+                )
+
+                if st.button("Save status", key=f"save_{plan_id}"):
+                    update_status(plan_id, selected_status)
+                    st.success("Status updated.")
+                    st.rerun()
+
+        st.markdown("## All support records")
+        st.dataframe(plans, use_container_width=True, hide_index=True)
+
+
+# --------------------------------------------------
+# FOOTER
+# --------------------------------------------------
+st.divider()
+st.caption(
+    "EduHope · No Student Left Behind · "
+    "Predictions support human judgment; they do not replace it."
+)
