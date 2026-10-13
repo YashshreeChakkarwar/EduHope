@@ -13,7 +13,9 @@ DRIVE_FILE_ID = "1V9ptd87Nlp5ojM9rVC4prcBvMWMT0L2a"
 def load_model():
     if not os.path.exists(MODEL_PATH):
         url = f"https://drive.google.com/uc?id={DRIVE_FILE_ID}"
-        gdown.download(url, MODEL_PATH, quiet=False)
+        result = gdown.download(url, MODEL_PATH, quiet=False)
+        if result is None:
+            raise RuntimeError("Model download failed. Check Google Drive sharing.")
 
     return joblib.load(MODEL_PATH)
 
@@ -22,14 +24,14 @@ try:
     model = bundle["model"]
     feature_names = bundle["feature_names"]
 except Exception as e:
-    st.error("Unable to load the model. Check the Google Drive sharing settings.")
+    st.error(f"Unable to load the model: {e}")
     st.stop()
 
 st.title("🎓 EduHope")
 st.subheader("No Student Left Behind")
 st.write(
     "Predict student outcomes using machine learning "
-    "and help identify where additional student support may be useful."
+    "and identify where additional support may help."
 )
 
 st.info("Enter the numeric values for the dataset features below.")
@@ -67,4 +69,4 @@ if submitted:
 
     st.caption(
         "This is a prediction, not a certainty or a judgment about the student."
-    ) judgment about the student.")
+    )
